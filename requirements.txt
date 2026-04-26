@@ -1,0 +1,8 @@
+aiogram
+aiosqlite
+aiohttp
+python-dotenv
+fastapi
+uvicorn
+httpx
+asyncpg
