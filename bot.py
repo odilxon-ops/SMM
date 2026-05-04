@@ -2,12 +2,13 @@ import asyncio
 import logging
 
 import runtime_bootstrap
+
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from config import ADMINS, BOT_TOKEN, validate_runtime_config
-from database.models import init_db
+from config import ADMINS, BOT_TOKEN, STARTUP_NOTIFY_RECENT_DAYS, validate_runtime_config
+from database.models import db, init_db
 from handlers import (
     order_handlers,
     payment_handlers,
@@ -25,6 +26,24 @@ from middlewares.throttling import ThrottlingMiddleware
 from utils.order_sync import sync_smm_orders
 
 
+async def notify_users_on_start(bot: Bot):
+    user_ids = await db.get_recent_user_ids(STARTUP_NOTIFY_RECENT_DAYS)
+    if not user_ids:
+        return
+
+    for user_id in user_ids:
+        if user_id in ADMINS:
+            continue
+        try:
+            await bot.send_message(
+                user_id,
+                "🔔 <b>Bot qayta ishga tushdi!</b>\nBot endi yana ishlamoqda va barcha xizmatlar tayyor.",
+            )
+        except Exception as exc:
+            logging.debug("Foydalanuvchi %s ga xabar yuborib bo'lmadi: %s", user_id, exc)
+        await asyncio.sleep(0.1)
+
+
 async def on_startup(bot: Bot):
     await init_db()
 
@@ -33,6 +52,8 @@ async def on_startup(bot: Bot):
             await bot.send_message(admin_id, "🚀 <b>Bot muvaffaqiyatli ishga tushdi!</b>")
         except Exception as exc:
             logging.error("Admin %s ga xabar yuborib bo'lmadi: %s", admin_id, exc)
+
+    asyncio.create_task(notify_users_on_start(bot))
 
 
 async def main():
@@ -65,7 +86,7 @@ async def main():
     dp.callback_query.middleware(CheckStatusMiddleware())
     dp.startup.register(on_startup)
 
-    asyncio.create_task(sync_smm_orders())
+    asyncio.create_task(sync_smm_orders(bot))
     
     try:
         while True:
